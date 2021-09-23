@@ -1,6 +1,13 @@
 import PlantronicsService from '../../../../src/services/vendor-implementations/plantronics/plantronics';
 import DeviceInfo from '../../../../src/types/device-info';
 import { mockLogger } from '../../test-utils';
+// import fetchMock from 'jest-fetch-mock';
+import nock = require('nock');
+import {
+  createNock,
+  mockRegister,
+} from '../../../mock-apis';
+// import fetchJsonp from 'fetch-jsonp';
 
 const testDevice: DeviceInfo = {
   ProductName: 'testDevice1',
@@ -8,7 +15,7 @@ const testDevice: DeviceInfo = {
 
 function resetService(plantronicsService: PlantronicsService) {
   plantronicsService.vendorName = 'Plantronics';
-  plantronicsService.pluginName = 'emberApp2';
+  plantronicsService.pluginName = 'genesys-cloud-headset-library';
   plantronicsService._deviceInfo = null;
   plantronicsService.activePollingInterval = 2000;
   plantronicsService.connectedDeviceInterval = 6000;
@@ -123,17 +130,17 @@ describe('PlantronicsService', () => {
   });
 
   describe('pollForCallEvents', () => {
-    beforeEach(() => {
-      jest.useFakeTimers();
+    afterEach(() => {
+      jest.useRealTimers();
     })
     it('will not call getCallEventsSpy if proper flags are not met', () => {
       const getCallEventsSpy = jest.spyOn(plantronicsService, 'getCallEvents');
       const pollForCallEventsSpy = jest.spyOn(plantronicsService, 'pollForCallEvents');
-
+      jest.useFakeTimers();
+      plantronicsService.pollForCallEvents();
       expect(getCallEventsSpy).not.toHaveBeenCalled();
-      setTimeout(() => {
-        expect(pollForCallEventsSpy).toHaveBeenCalled();
-      }, plantronicsService.activePollingInterval);
+      jest.advanceTimersByTime(plantronicsService.activePollingInterval);
+      expect(pollForCallEventsSpy).toHaveBeenCalled();
     })
     it('will call getCallEventsSpy if proper flags are met', () => {
       const getCallEventsSpy = jest.spyOn(plantronicsService, 'getCallEvents');
@@ -142,11 +149,110 @@ describe('PlantronicsService', () => {
       plantronicsService.isActive = true;
       plantronicsService.disableEventPolling = false;
 
+      jest.useFakeTimers();
       plantronicsService.pollForCallEvents();
 
       expect(getCallEventsSpy).toHaveBeenCalled();
-      setTimeout(() => {
-        expect(pollForCallEventsSpy).toHaveBeenCalled();
-      }, plantronicsService.activePollingInterval);    })
+      jest.advanceTimersByTime(plantronicsService.activePollingInterval);
+      expect(pollForCallEventsSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('pollForDeviceStatus', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    })
+    it('will not call getDeviceStatusSpy if proper flags are not met', () => {
+      plantronicsService.isConnecting = true;
+      const getDeviceStatusSpy = jest.spyOn(plantronicsService, 'getDeviceStatus');
+      const pollForDeviceStatusSpy = jest.spyOn(plantronicsService, 'pollForDeviceStatus');
+      jest.useFakeTimers();
+      plantronicsService.pollForDeviceStatus();
+      expect(getDeviceStatusSpy).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(plantronicsService.disconnectedDeviceInterval);
+      expect(pollForDeviceStatusSpy).toHaveBeenCalled();
+    });
+    it('will call getDeviceStatusSpy if proper flags are met', () => {
+      plantronicsService.isConnecting = false;
+      const getDeviceStatusSpy = jest.spyOn(plantronicsService, 'getDeviceStatus');
+      const pollForDeviceStatusSpy = jest.spyOn(plantronicsService, 'pollForDeviceStatus');
+      jest.useFakeTimers();
+      plantronicsService.pollForDeviceStatus();
+      expect(getDeviceStatusSpy).toHaveBeenCalled();
+      jest.advanceTimersByTime(plantronicsService.disconnectedDeviceInterval);
+      expect(pollForDeviceStatusSpy).toHaveBeenCalled();
+    })
+  });
+
+  describe('callCorrespondingFunction', () => {
+    it('will call deviceAnsweredCall', () => {
+      const deviceAnsweredCallSpy = jest.spyOn(plantronicsService, 'deviceAnsweredCall');
+      plantronicsService.callCorrespondingFunction({
+        name: 'AcceptCall',
+        code: '1',
+        event: {}
+      });
+      expect(deviceAnsweredCallSpy).toHaveBeenCalled();
+    });
+    it('will call deviceEndedCall', () => {
+      const deviceEndedCallSpy = jest.spyOn(plantronicsService, 'deviceEndedCall');
+      plantronicsService.callCorrespondingFunction({
+        name: 'TerminateCall'
+      });
+      expect(deviceEndedCallSpy).toHaveBeenCalled();
+    });
+    it('will call _checkIsActiveTask', () => {
+      const _checkIsActiveTaskSpy = jest.spyOn(plantronicsService, '_checkIsActiveTask');
+      plantronicsService.callCorrespondingFunction({
+        name: 'CallEnded'
+      });
+      expect(_checkIsActiveTaskSpy).toHaveBeenCalled();
+    })
+    it('will call deviceMuteChanged with the proper flag', () => {
+      const deviceMuteChangedSpy = jest.spyOn(plantronicsService, 'deviceMuteChanged');
+      plantronicsService.callCorrespondingFunction({
+        name: 'Mute'
+      });
+      expect(deviceMuteChangedSpy).toHaveBeenCalledWith(true, {name: 'Mute'});
+
+      plantronicsService.callCorrespondingFunction({
+        name: 'Unmute'
+      });
+      expect(deviceMuteChangedSpy).toHaveBeenLastCalledWith(false, {name: 'Unmute'});
+    });
+    it('will call deviceHoldStatusChanged with the proper flag', () => {
+      const deviceHoldStatusChangedSpy = jest.spyOn(plantronicsService, 'deviceHoldStatusChanged');
+      plantronicsService.callCorrespondingFunction({
+        name: 'HoldCall'
+      });
+      expect(deviceHoldStatusChangedSpy).toHaveBeenCalledWith(true, {name: 'HoldCall'});
+
+      plantronicsService.callCorrespondingFunction({
+        name: 'ResumeCall'
+      });
+      expect(deviceHoldStatusChangedSpy).toHaveBeenCalledWith(false, {name: 'ResumeCall'});
+    });
+
+    it('calls deviceEventLogs when no valid event was passed in', () => {
+      const deviceEventLogsSpy = jest.spyOn(plantronicsService, 'deviceEventLogs');
+      plantronicsService.callCorrespondingFunction({
+        name: 'Test'
+      });
+      expect(deviceEventLogsSpy).toHaveBeenCalled();
+    })
+  });
+
+  describe('_checkIsActiveTask', () => {
+    it('should set isActive according to the length of calls', () => {
+      const _getActiveCallsSpy = jest.spyOn(plantronicsService, '_getActiveCalls');
+
+      plantronicsService._checkIsActiveTask();
+      expect(_getActiveCallsSpy).toHaveBeenCalled();
+      expect(plantronicsService.isActive).toBeFalsy();
+
+      plantronicsService._checkIsActiveTask();
+      expect(_getActiveCallsSpy).toHaveBeenCalled();
+      expect(plantronicsService.isActive).toBeTruthy();
+    });
   })
 });

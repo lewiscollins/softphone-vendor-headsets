@@ -227,7 +227,6 @@ describe('JabraChromeService', () => {
       });
 
       it('should log an info message if logHeasetEvents is true', () => {
-        jabraChromeService.logHeadsetEvents = true;
         event.data.message = 'test message';
         jest.spyOn(mockLogger, 'info');
 

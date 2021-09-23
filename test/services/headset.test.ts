@@ -7,7 +7,7 @@ import JabraNativeService from '../../src/services/vendor-implementations/jabra/
 import { HeadsetEventName } from '../../src/types/headset-event';
 import CallInfo from '../../src/types/call-info';
 import ApplicationService from '../../src/services/application';
-import { VendorEventWithInfo } from '../../src/types/headset-events';
+import { EventInfo, VendorEvent } from '../../src/types/headset-events';
 
 describe('HeadsetService', () => {
   let plantronics: VendorImplementation;
@@ -363,7 +363,7 @@ describe('HeadsetService', () => {
     it(
       'should send a headset event of type DEVICE_ANSWERED_CALL', () => {
         headsetService.selectedImplementation = plantronics
-        headsetService.handleDeviceAnsweredCall({vendor: plantronics, body: {name: 'AcceptCall', code: '1', event: {}}} as VendorEventWithInfo);
+        headsetService.handleDeviceAnsweredCall({vendor: plantronics, body: {name: 'AcceptCall', code: '1', event: {}}} as VendorEvent<EventInfo>);
 
         const headsetEventSubject = headsetService.getHeadSetEventsSubject().getValue();
 
